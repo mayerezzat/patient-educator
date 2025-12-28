@@ -13,19 +13,21 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- جلب المفتاح بأمان من Secrets ---
-# تأكد من إضافة GEMINI_API_KEY في إعدادات Streamlit Cloud
+# --- إعدادات المنتج وجلب المفتاح من Secrets ---
+PRODUCT_NAME = "Mornigag"
+
+# جلب المفتاح بأمان من إعدادات Streamlit Cloud
 if "GEMINI_API_KEY" in st.secrets:
     GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 else:
-    st.error("⚠️ لم يتم العثور على مفتاح GEMINI_API_KEY في إعدادات Secrets.")
+    st.error("⚠️ لم يتم العثور على المفتاح! يرجى إضافته في إعدادات Secrets باسم GEMINI_API_KEY")
     st.stop()
 
 @st.cache_resource
 def get_gemini_client():
-    """تهيئة عميل Gemini بالتسمية الصحيحة api_key"""
+    """تهيئة عميل Gemini - تم تصحيح api_key هنا"""
     try:
-        # التصحيح هنا: استخدام api_key فقط
+        # التصحيح: api_key هو الاسم الصحيح للبارامتر
         return genai.Client(api_key=GEMINI_API_KEY)
     except Exception as e:
         st.error(f"خطأ في تهيئة عميل Gemini: {e}")
@@ -42,25 +44,25 @@ def format_bidi_text(text, lang):
 def get_texts(lang):
     if lang == 'English':
         return {
-            'title': "Patient Counselling Simulation",
+            'title': f"Patient Counselling: **{PRODUCT_NAME}**",
             'instructions': "Your role is the **Patient**. The AI is the **Educator**.",
             'speak_prompt': "Click to Speak (🎙️)",
             'stop_prompt': "Stop (⏹️)",
             'thinking_spinner': "AI is thinking...",
             'gemini_model': "gemini-2.0-flash",
             'tts_lang_code': 'en',
-            'welcome_msg': "Hello, I am your Patient Educator. Can you please tell me your name?"
+            'welcome_msg': f"Hello, I am your Patient Educator. We are discussing {PRODUCT_NAME}. Can you please tell me your name?"
         }
     else:
         return {
-            'title': "محاكاة إرشاد المريض",
+            'title': f"إرشاد المريض: **{PRODUCT_NAME}**",
             'instructions': "دورك هو **المريض**. الذكاء الاصطناعي هو **المثقف**.",
             'speak_prompt': "انقر للتحدث (🎙️)",
             'stop_prompt': "إيقاف (⏹️)",
             'thinking_spinner': "الذكاء الاصطناعي يفكر...",
             'gemini_model': "gemini-2.0-flash",
             'tts_lang_code': 'ar',
-            'welcome_msg': "أهلاً بكِ. أنا مثقف المريض الخاص بكِ. هل يمكنكِ إخباري باسمكِ؟"
+            'welcome_msg': f"أهلاً بكِ. أنا مثقف المريض الخاص بكِ. نتحدث اليوم عن {PRODUCT_NAME}. هل يمكنكِ إخباري باسمكِ؟"
         }
 
 # --- واجهة المستخدم ---
@@ -72,7 +74,7 @@ st.info(texts['instructions'])
 # --- إدارة الجلسة ---
 if "chat_session" not in st.session_state:
     config = types.GenerateContentConfig(
-        system_instruction=f"You are a Patient Educator. {texts['welcome_msg']}"
+        system_instruction=f"You are a Patient Educator. Be helpful and clear. {texts['welcome_msg']}"
     )
     st.session_state.chat_session = client.chats.create(model=texts['gemini_model'], config=config)
 
@@ -81,27 +83,26 @@ chat_session = st.session_state.chat_session
 # --- منطقة المحادثة ---
 chat_container = st.container()
 
-# إدخال الصوت والنص
 col1, col2 = st.columns([1, 4])
 with col1:
-    spoken_text = speech_to_text(language=texts['tts_lang_code'], start_prompt=texts['speak_prompt'], stop_prompt=texts['stop_prompt'], key='mic')
+    spoken_text = speech_to_text(language=texts['tts_lang_code'], start_prompt=texts['speak_prompt'], stop_prompt=texts['stop_prompt'], key='mic_input')
 with col2:
-    written_text = st.text_input("Write here / اكتب هنا", key='text_input')
+    written_text = st.text_input("اكتب رسالتك هنا...", key='text_input')
 
 user_input = spoken_text if spoken_text else written_text
 
 if user_input:
     with st.spinner(texts['thinking_spinner']):
-        response = chat_session.send_message(user_input)
-        ai_response = response.text
-        # تشغيل الصوت تلقائياً
-        text_to_speech(text=ai_response, language=texts['tts_lang_code'], key=f"tts_{len(chat_session.get_history())}")
+        try:
+            response = chat_session.send_message(user_input)
+            ai_response = response.text
+            text_to_speech(text=ai_response, language=texts['tts_lang_code'], key=f"tts_{len(chat_session.get_history())}")
+        except Exception as e:
+            st.error(f"حدث خطأ أثناء الاتصال: {e}")
 
-# عرض الرسائل
+# عرض الرسائل من التاريخ
 for msg in chat_session.get_history():
     if msg.role != "system":
         with chat_container:
-            st.chat_message("user" if msg.role == "user" else "assistant").markdown(
-                format_bidi_text(msg.parts[0].text, selected_language), 
-                unsafe_allow_html=True
-            )
+            role = "user" if msg.role == "user" else "assistant"
+            st.chat_message(role).markdown(format_bidi_text(msg.parts[0].text, selected_language), unsafe_allow_html=True)
