@@ -20,7 +20,7 @@ except:
 @st.cache_resource
 def get_gemini_client():
     try:
-        return genai.Client(api_api_key=GEMINI_API_KEY)
+        return genai.Client(api_api_key=AIzaSyDpjmc3mMO4q4KP1MvHMXOsOL_k5M6-umA)
     except Exception as e:
         st.error(f"خطأ في تهيئة Gemini: {e}")
         st.stop()
@@ -29,4 +29,5 @@ client = get_gemini_client()
 
 # بقية الكود الخاص بك كما هو...
 # (للاختصار، أكمل بقية وظائف الـ Bidi و الـ Chat Session هنا)
+
 
