@@ -1,5 +1,5 @@
 import streamlit as st
-import google.generativeai as palmlib # استخدام المكتبة المستقرة
+import google.generativeai as genai # استخدام المكتبة المستقرة
 from streamlit_mic_recorder import speech_to_text
 from streamlit_TTS import text_to_speech
 import os
@@ -15,15 +15,15 @@ st.set_page_config(
 PRODUCT_NAME = "Mornigag"
 GEMINI_API_KEY = "AIzaSyDpjmc3mMO4q4KP1MvHMXOsOL_k5M6-umA"
 
-# تهيئة المكتبة
-palmlib.configure(api_key=GEMINI_API_KEY)
+# تهيئة Gemini بالمكتبة المستقرة
+genai.configure(api_key=GEMINI_API_KEY)
 
 def format_bidi_text(text, lang):
     if lang == 'Arabic':
         return f'<div style="direction: rtl; unicode-bidi: embed; text-align: right;">{text}</div>'
     return text
 
-# --- 3. النصوص (تم حذف الجملة وتعديل التعليمات) ---
+# --- 3. النصوص (تم حذف الجملة وتعديل التعليمات بناءً على طلبك) ---
 def get_texts(lang):
     instruction_ar = "للبدء، انقر على أيقونة **انقر للتحدث** ثم تحدث، وبعد الانتهاء انقر عليها مرة أخرى."
     instruction_en = "To start, click on the **Click to Speak** icon, then talk, and click it again when finished."
@@ -59,59 +59,65 @@ def get_texts(lang):
             'stt_lang': 'ar'
         }
 
-# --- 4. واجهة المستخدم ---
+# --- 4. شريط الإعدادات ---
 selected_lang = st.sidebar.selectbox("Language", ["Arabic", "English"], index=0)
 texts = get_texts(selected_lang)
 tts_speed = st.sidebar.slider(texts['speed_slider'], 0.5, 2.0, 1.2)
 
+# --- 5. الواجهة الرئيسية ---
 st.markdown(f"## {texts['title']}")
 with st.expander("Instructions", expanded=True):
     st.markdown(texts['instructions'])
 
-# --- 5. إدارة الجلسة (استخدام المكتبة المستقرة لتجنب 404) ---
+# --- 6. إدارة الجلسة (الحل الجذري لخطأ 404) ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
 if "chat_session" not in st.session_state or st.session_state.get('last_lang') != selected_lang:
     st.session_state.last_lang = selected_lang
-    model = palmlib.GenerativeModel(
+    # إنشاء الموديل باستخدام المكتبة المستقرة
+    model = genai.GenerativeModel(
         model_name="gemini-1.5-flash",
-        system_instruction=f"You are a Patient Educator for {PRODUCT_NAME}. Patient: Sarah. Respond in {selected_lang} only."
+        system_instruction=f"You are a helpful Patient Educator for {PRODUCT_NAME}. Respondent is Sarah. Respond in {selected_lang} only."
     )
     st.session_state.chat_session = model.start_chat(history=[])
 
-# --- 6. الإدخال والعرض ---
+# --- 7. الإدخال (صوت وكتابة) ---
 input_col1, input_col2 = st.columns([1, 4])
 with input_col1:
     spoken = speech_to_text(language=texts['stt_lang'], start_prompt=texts['speak_prompt'], stop_prompt=texts['stop_prompt'], just_once=True, key=f"mic_{selected_lang}")
 with input_col2:
-    written = st.text_input(texts['chat_input_prompt'], key=f"txt_{selected_lang}", label_visibility="collapsed")
+    written = st.text_input(texts['chat_input_prompt'], key=f"input_{selected_lang}", label_visibility="collapsed")
 
 user_input = spoken if spoken else written
 
+# --- 8. معالجة وعرض المحادثة ---
 chat_display = st.container()
 
-# عرض التاريخ
+# عرض التاريخ من الـ session_state
 for m in st.session_state.messages:
     with chat_display:
         st.chat_message(m["role"], avatar=m.get("avatar")).markdown(format_bidi_text(m["content"], selected_lang), unsafe_allow_html=True)
 
 if user_input:
+    # حفظ رسالة المستخدم
     st.session_state.messages.append({"role": "user", "content": user_input, "avatar": None})
     with chat_display:
         st.chat_message("user").markdown(format_bidi_text(user_input, selected_lang), unsafe_allow_html=True)
     
     with st.spinner(texts['thinking_spinner']):
         try:
-            # إرسال الرسالة باستخدام الطريقة المستقرة
+            # إرسال الرسالة
             response = st.session_state.chat_session.send_message(user_input)
             ai_text = response.text
             
+            # حفظ رد المعلم
             st.session_state.messages.append({"role": "assistant", "content": ai_text, "avatar": "👩‍⚕️"})
             with chat_display:
                 st.chat_message("assistant", avatar="👩‍⚕️").markdown(format_bidi_text(ai_text, selected_lang), unsafe_allow_html=True)
             
-            text_to_speech(text=ai_text, language=texts['tts_lang'], key=f"tts_{hash(ai_text)}")
+            # تشغيل الصوت تلقائياً
+            text_to_speech(text=ai_text, language=texts['tts_lang'], key=f"aud_{hash(ai_text)}")
             st.rerun()
         except Exception as e:
-            st.error(f"خطأ: تأكد من تحديث مكتبة google-generativeai في requirements.txt")
+            st.error(f"خطأ في الاتصال: يرجى التأكد من مفتاح الـ API وتحديث الصفحة.")
