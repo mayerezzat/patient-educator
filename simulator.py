@@ -1,5 +1,5 @@
 import streamlit as st
-import google.generativeai as genai # المكتبة المستقرة
+import google.generativeai as genai  # استخدام المكتبة المستقرة
 from streamlit_mic_recorder import speech_to_text
 from streamlit_TTS import text_to_speech
 
@@ -46,17 +46,16 @@ st.markdown(f"## {texts['title']}")
 with st.expander("Instructions / تعليمات", expanded=True):
     st.markdown(texts['instructions'])
 
-# --- 5. إدارة الجلسة (الحل النهائي لـ 404) ---
+# --- 5. إدارة الجلسة (تجنب 404 نهائياً) ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-if "chat" not in st.session_state or st.session_state.get('lang') != selected_lang:
-    st.session_state.lang = selected_lang
-    # استخدام الموديل عبر المكتبة المستقرة مباشرة
-    model = genai.GenerativeModel('gemini-1.5-flash')
-    st.session_state.chat = model.start_chat(history=[])
-    # رسالة تعريفية للنظام (خلف الكواليس)
-    st.session_state.chat.send_message(f"You are a patient educator for {PRODUCT_NAME}. Speak in {selected_lang} only.")
+# استخدام الموديل مباشرة (GenerativeModel)
+@st.cache_resource
+def get_model():
+    return genai.GenerativeModel('gemini-1.5-flash')
+
+model = get_model()
 
 # --- 6. الإدخال ---
 c1, c2 = st.columns([1, 4])
@@ -67,24 +66,33 @@ with c2:
 
 user_input = spoken if spoken else written
 
-# --- 7. العرض ---
+# --- 7. العرض والمعالجة ---
 container = st.container()
 for m in st.session_state.messages:
     with container:
         st.chat_message(m["role"]).markdown(format_bidi_text(m["content"], selected_lang), unsafe_allow_html=True)
 
 if user_input:
+    # حفظ رسالة المستخدم
     st.session_state.messages.append({"role": "user", "content": user_input})
     with container:
         st.chat_message("user").markdown(format_bidi_text(user_input, selected_lang), unsafe_allow_html=True)
     
-    try:
-        response = st.session_state.chat.send_message(user_input)
-        ai_text = response.text
-        st.session_state.messages.append({"role": "assistant", "content": ai_text})
-        with container:
-            st.chat_message("assistant", avatar="👩‍⚕️").markdown(format_bidi_text(ai_text, selected_lang), unsafe_allow_html=True)
-        text_to_speech(text=ai_text, language=texts['tts_lang'], key=f"v_{hash(ai_text)}")
-        st.rerun()
-    except Exception as e:
-        st.error("خطأ في الاتصال، يرجى إعادة تحميل الصفحة.")
+    with st.spinner("..."):
+        try:
+            # بناء السياق يدوياً لضمان الاستقرار
+            prompt = f"System: You are a Patient Educator for {PRODUCT_NAME}. Patient is Sarah. Speak in {selected_lang} only.\n\n"
+            for m in st.session_state.messages[-5:]: # آخر 5 رسائل للسياق
+                prompt += f"{m['role']}: {m['content']}\n"
+            
+            response = model.generate_content(prompt)
+            ai_text = response.text
+            
+            st.session_state.messages.append({"role": "assistant", "content": ai_text})
+            with container:
+                st.chat_message("assistant", avatar="👩‍⚕️").markdown(format_bidi_text(ai_text, selected_lang), unsafe_allow_html=True)
+            
+            text_to_speech(text=ai_text, language=texts['tts_lang'], key=f"v_{hash(ai_text)}")
+            st.rerun()
+        except Exception:
+            st.error("Connection Error. Please refresh the page.")
