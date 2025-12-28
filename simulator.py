@@ -1,5 +1,5 @@
 import streamlit as st
-import google.generativeai as genai  # استخدام المكتبة المستقرة
+import google.generativeai as genai
 from streamlit_mic_recorder import speech_to_text
 from streamlit_TTS import text_to_speech
 
@@ -46,11 +46,10 @@ st.markdown(f"## {texts['title']}")
 with st.expander("Instructions / تعليمات", expanded=True):
     st.markdown(texts['instructions'])
 
-# --- 5. إدارة الجلسة (تجنب 404 نهائياً) ---
+# --- 5. إدارة الجلسة ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# استخدام الموديل مباشرة (GenerativeModel)
 @st.cache_resource
 def get_model():
     return genai.GenerativeModel('gemini-1.5-flash')
@@ -73,16 +72,14 @@ for m in st.session_state.messages:
         st.chat_message(m["role"]).markdown(format_bidi_text(m["content"], selected_lang), unsafe_allow_html=True)
 
 if user_input:
-    # حفظ رسالة المستخدم
     st.session_state.messages.append({"role": "user", "content": user_input})
     with container:
         st.chat_message("user").markdown(format_bidi_text(user_input, selected_lang), unsafe_allow_html=True)
     
     with st.spinner("..."):
         try:
-            # بناء السياق يدوياً لضمان الاستقرار
-            prompt = f"System: You are a Patient Educator for {PRODUCT_NAME}. Patient is Sarah. Speak in {selected_lang} only.\n\n"
-            for m in st.session_state.messages[-5:]: # آخر 5 رسائل للسياق
+            prompt = f"System: You are a Patient Educator for {PRODUCT_NAME}. Speak in {selected_lang} only.\n\n"
+            for m in st.session_state.messages[-5:]:
                 prompt += f"{m['role']}: {m['content']}\n"
             
             response = model.generate_content(prompt)
@@ -94,5 +91,5 @@ if user_input:
             
             text_to_speech(text=ai_text, language=texts['tts_lang'], key=f"v_{hash(ai_text)}")
             st.rerun()
-        except Exception:
-            st.error("Connection Error. Please refresh the page.")
+        except Exception as e:
+            st.error("خطأ في الاتصال. يرجى التأكد من تحديث ملف requirements.txt")
