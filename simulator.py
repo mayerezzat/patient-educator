@@ -19,10 +19,9 @@ GEMINI_API_KEY = "AIzaSyDpjmc3mMO4q4KP1MvHMXOsOL_k5M6-umA"
 @st.cache_resource
 def get_gemini_client():
     try:
-        # استخدام العميل مع تحديد مفتاح الـ API
         return genai.Client(api_key=GEMINI_API_KEY)
     except Exception as e:
-        st.error(f"خطأ في تهيئة Gemini: {e}")
+        st.error(f"خطأ في الاتصال: {e}")
         st.stop()
 
 client = get_gemini_client()
@@ -32,9 +31,9 @@ def format_bidi_text(text, lang):
         return f'<div style="direction: rtl; unicode-bidi: embed; text-align: right;">{text}</div>'
     return text
 
-# --- 3. النصوص (تم حذف الجملة المطلوبة وتعديل التعليمات) ---
+# --- 3. النصوص (تعديل العنوان والتعليمات) ---
 def get_texts(lang):
-    # التعليمات التي طلبتها
+    # النص الذي طلبته بالضبط
     instruction_ar = "للبدء، انقر على أيقونة **انقر للتحدث** ثم تحدث، وبعد الانتهاء انقر عليها مرة أخرى."
     instruction_en = "To start, click on the **Click to Speak** icon, then talk, and click it again when finished."
 
@@ -50,7 +49,7 @@ def get_texts(lang):
             'stop_prompt': "Stop Recording (⏹️)",
             'chat_input_prompt': "Type here...",
             'thinking_spinner': "AI is processing...",
-            'model_id': "gemini-1.5-flash", # صياغة الاسم الصحيحة
+            'model_id': "gemini-1.5-flash", # الموديل المستقر
             'tts_lang': 'en',
             'stt_lang': 'en'
         }
@@ -71,7 +70,7 @@ def get_texts(lang):
             'stt_lang': 'ar'
         }
 
-# --- 4. الشريط الجانبي ---
+# --- 4. شريط الإعدادات ---
 selected_lang = st.sidebar.selectbox("Language", ["Arabic", "English"], index=0)
 texts = get_texts(selected_lang)
 tts_speed = st.sidebar.slider(texts['speed_slider'], 0.5, 2.0, 1.2)
@@ -81,51 +80,42 @@ st.markdown(f"## {texts['title']}")
 with st.expander("Instructions", expanded=True):
     st.markdown(texts['instructions'])
 
-# --- 6. إدارة جلسة الدردشة (حل مشكلة 404) ---
-# نستخدم معرف فريد للجلسة يعتمد على اللغة لمنع الأخطاء
+# --- 6. إدارة الجلسة (حل مشكلة 404) ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-session_key = f"chat_instance_{selected_lang}"
+# استخدام معرف فريد للجلسة يعتمد على اللغة
+session_key = f"chat_session_{selected_lang}"
 if session_key not in st.session_state:
-    sys_instruction = f"You are a helpful Patient Educator for the drug {PRODUCT_NAME}. Patient: Sarah. Respond in {selected_lang} only."
-    
-    # محاولة إنشاء الجلسة
+    sys_instruction = f"You are a helpful Patient Educator for {PRODUCT_NAME}. Respond in {selected_lang} only."
     try:
+        # إنشاء الجلسة مع الموديل
         st.session_state[session_key] = client.chats.create(
             model=texts['model_id'],
             config=types.GenerateContentConfig(system_instruction=sys_instruction)
         )
     except Exception as e:
-        st.error(f"خطأ في إنشاء الجلسة: {e}")
+        st.error(f"Error initializing chat: {e}")
 
-# --- 7. الإدخال (صوت وكتابة) ---
+# --- 7. الإدخال والعرض ---
 input_col1, input_col2 = st.columns([1, 4])
 with input_col1:
-    spoken = speech_to_text(
-        language=texts['stt_lang'], 
-        start_prompt=texts['speak_prompt'], 
-        stop_prompt=texts['stop_prompt'], 
-        just_once=True, 
-        key=f"mic_{selected_lang}"
-    )
+    spoken = speech_to_text(language=texts['stt_lang'], start_prompt=texts['speak_prompt'], stop_prompt=texts['stop_prompt'], just_once=True, key=f"mic_{selected_lang}")
 with input_col2:
-    written = st.text_input(texts['chat_input_prompt'], key=f"input_{selected_lang}", label_visibility="collapsed")
+    written = st.text_input(texts['chat_input_prompt'], key=f"txt_{selected_lang}", label_visibility="collapsed")
 
 user_input = spoken if spoken else written
 
-# --- 8. معالجة وعرض الرسائل ---
-chat_container = st.container()
+chat_display = st.container()
 
-# عرض التاريخ من الـ session_state
+# عرض التاريخ من session_state
 for m in st.session_state.messages:
-    with chat_container:
+    with chat_display:
         st.chat_message(m["role"], avatar=m.get("avatar")).markdown(format_bidi_text(m["content"], selected_lang), unsafe_allow_html=True)
 
 if user_input:
-    # حفظ رسالة المستخدم
     st.session_state.messages.append({"role": "user", "content": user_input, "avatar": None})
-    with chat_container:
+    with chat_display:
         st.chat_message("user").markdown(format_bidi_text(user_input, selected_lang), unsafe_allow_html=True)
     
     with st.spinner(texts['thinking_spinner']):
@@ -134,13 +124,12 @@ if user_input:
             response = st.session_state[session_key].send_message(user_input)
             ai_text = response.text
             
-            # حفظ رد المعلم
             st.session_state.messages.append({"role": "assistant", "content": ai_text, "avatar": "👩‍⚕️"})
-            with chat_container:
+            with chat_display:
                 st.chat_message("assistant", avatar="👩‍⚕️").markdown(format_bidi_text(ai_text, selected_lang), unsafe_allow_html=True)
             
             # تشغيل الصوت
-            text_to_speech(text=ai_text, language=texts['tts_lang'], key=f"audio_{hash(ai_text)}")
+            text_to_speech(text=ai_text, language=texts['tts_lang'], key=f"tts_{hash(ai_text)}")
             st.rerun()
         except Exception as e:
-            st.error(f"حدث خطأ أثناء طلب الرد: {e}")
+            st.error(f"خطأ في الرد: {e}")
