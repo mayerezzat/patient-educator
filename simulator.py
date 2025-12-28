@@ -1,5 +1,5 @@
 import streamlit as st
-import google.generativeai as genai # استخدام المكتبة المستقرة
+import google.generativeai as genai  # استخدام المكتبة المستقرة
 from streamlit_mic_recorder import speech_to_text
 from streamlit_TTS import text_to_speech
 import os
@@ -25,6 +25,7 @@ def format_bidi_text(text, lang):
 
 # --- 3. النصوص (تم حذف الجملة وتعديل التعليمات بناءً على طلبك) ---
 def get_texts(lang):
+    # النص الذي طلبته بالضبط
     instruction_ar = "للبدء، انقر على أيقونة **انقر للتحدث** ثم تحدث، وبعد الانتهاء انقر عليها مرة أخرى."
     instruction_en = "To start, click on the **Click to Speak** icon, then talk, and click it again when finished."
 
@@ -69,16 +70,17 @@ st.markdown(f"## {texts['title']}")
 with st.expander("Instructions", expanded=True):
     st.markdown(texts['instructions'])
 
-# --- 6. إدارة الجلسة (الحل الجذري لخطأ 404) ---
+# --- 6. إدارة الجلسة (الحل النهائي لخطأ 404) ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+# إعادة ضبط الجلسة عند تغيير اللغة
 if "chat_session" not in st.session_state or st.session_state.get('last_lang') != selected_lang:
     st.session_state.last_lang = selected_lang
     # إنشاء الموديل باستخدام المكتبة المستقرة
     model = genai.GenerativeModel(
         model_name="gemini-1.5-flash",
-        system_instruction=f"You are a helpful Patient Educator for {PRODUCT_NAME}. Respondent is Sarah. Respond in {selected_lang} only."
+        system_instruction=f"You are a helpful Patient Educator for {PRODUCT_NAME}. Patient is Sarah. Respond in {selected_lang} only."
     )
     st.session_state.chat_session = model.start_chat(history=[])
 
@@ -94,30 +96,30 @@ user_input = spoken if spoken else written
 # --- 8. معالجة وعرض المحادثة ---
 chat_display = st.container()
 
-# عرض التاريخ من الـ session_state
+# عرض التاريخ المخزن في الجلسة
 for m in st.session_state.messages:
     with chat_display:
         st.chat_message(m["role"], avatar=m.get("avatar")).markdown(format_bidi_text(m["content"], selected_lang), unsafe_allow_html=True)
 
 if user_input:
-    # حفظ رسالة المستخدم
+    # حفظ رسالة المستخدم وعرضها
     st.session_state.messages.append({"role": "user", "content": user_input, "avatar": None})
     with chat_display:
         st.chat_message("user").markdown(format_bidi_text(user_input, selected_lang), unsafe_allow_html=True)
     
     with st.spinner(texts['thinking_spinner']):
         try:
-            # إرسال الرسالة
+            # إرسال الرسالة عبر المكتبة المستقرة
             response = st.session_state.chat_session.send_message(user_input)
             ai_text = response.text
             
-            # حفظ رد المعلم
+            # حفظ رد المعلم وعرضه
             st.session_state.messages.append({"role": "assistant", "content": ai_text, "avatar": "👩‍⚕️"})
             with chat_display:
                 st.chat_message("assistant", avatar="👩‍⚕️").markdown(format_bidi_text(ai_text, selected_lang), unsafe_allow_html=True)
             
             # تشغيل الصوت تلقائياً
-            text_to_speech(text=ai_text, language=texts['tts_lang'], key=f"aud_{hash(ai_text)}")
+            text_to_speech(text=ai_text, language=texts['tts_lang'], key=f"audio_{hash(ai_text)}")
             st.rerun()
         except Exception as e:
-            st.error(f"خطأ في الاتصال: يرجى التأكد من مفتاح الـ API وتحديث الصفحة.")
+            st.error("خطأ في الاتصال. يرجى التأكد من أن مكتبة google-generativeai مضافة في requirements.txt")
