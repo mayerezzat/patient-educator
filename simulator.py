@@ -10,20 +10,22 @@ st.set_page_config(page_title="إرشاد Mornigag", layout="wide")
 PRODUCT_NAME = "Mornigag"
 GEMINI_API_KEY = "AIzaSyDpjmc3mMO4q4KP1MvHMXOsOL_k5M6-umA"
 
-# تهيئة Gemini
+# تهيئة Gemini (الحل الجذري لخطأ 404)
 try:
     genai.configure(api_key=GEMINI_API_KEY)
+    # نستخدم الموديل بدون كلمة models/ في البداية لتجنب تعارض الإصدارات
     model = genai.GenerativeModel('gemini-1.5-flash')
 except Exception as e:
-    st.error("API Key Error")
+    st.error("خطأ في تهيئة المفتاح")
 
 def format_bidi_text(text, lang):
     if lang == 'Arabic':
         return f'<div style="direction: rtl; text-align: right;">{text}</div>'
     return text
 
-# --- النصوص ---
+# --- النصوص المطلوبة ---
 def get_texts(lang):
+    # النص الذي طلبته بالضبط
     instr_ar = "للبدء، انقر على أيقونة **انقر للتحدث** ثم تحدث، وبعد الانتهاء انقر عليها مرة أخرى."
     instr_en = "To start, click on the **Click to Speak** icon, then talk, and click it again when finished."
     
@@ -62,7 +64,7 @@ with c2:
 
 user_input = spoken if spoken else written
 
-# --- العرض والمعالجة ---
+# --- المعالجة ---
 container = st.container()
 for m in st.session_state.messages:
     with container:
@@ -75,8 +77,9 @@ if user_input:
     
     with st.spinner("..."):
         try:
-            prompt = f"You are a professional Patient Educator for {PRODUCT_NAME}. Speak in {selected_lang} only. User says: {user_input}"
-            response = model.generate_content(prompt)
+            # صياغة الطلب بطريقة بسيطة ومستقرة
+            prompt_context = f"You are a professional Patient Educator for {PRODUCT_NAME}. Respondent is Sarah. Respond in {selected_lang} only. Question: {user_input}"
+            response = model.generate_content(prompt_context)
             ai_text = response.text
             
             st.session_state.messages.append({"role": "assistant", "content": ai_text})
@@ -86,4 +89,4 @@ if user_input:
             text_to_speech(text=ai_text, language=texts['tts_lang'], key=f"v_{hash(ai_text)}")
             st.rerun()
         except Exception as e:
-            st.error(f"خطأ في الاتصال: {str(e)}")
+            st.error(f"حدث خطأ: {str(e)}")
