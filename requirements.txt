@@ -1,3 +1,4 @@
 google-generativeai
 streamlit-mic-recorder
 streamlit-TTS
+python-dotenv
