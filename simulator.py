@@ -16,7 +16,7 @@ st.set_page_config(
 # --- إعدادات المنتج وجلب المفتاح من Secrets ---
 PRODUCT_NAME = "Mornigag"
 
-# جلب المفتاح بأمان من إعدادات Streamlit Cloud
+# جلب المفتاح بأمان من إعدادات Streamlit Cloud Secrets
 if "GEMINI_API_KEY" in st.secrets:
     GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 else:
@@ -27,7 +27,7 @@ else:
 def get_gemini_client():
     """تهيئة عميل Gemini - تم تصحيح api_key هنا"""
     try:
-        # التصحيح: api_key هو الاسم الصحيح للبارامتر
+        # التصحيح: api_key هو الاسم الصحيح للبارامتر وليس api_api_key
         return genai.Client(api_key=GEMINI_API_KEY)
     except Exception as e:
         st.error(f"خطأ في تهيئة عميل Gemini: {e}")
@@ -35,12 +35,13 @@ def get_gemini_client():
 
 client = get_gemini_client()
 
-# --- وظائف التنسيق والنصوص ---
+# --- وظيفة لتنسيق النص ودعم اتجاهات الكتابة (RTL) ---
 def format_bidi_text(text, lang):
     if lang == 'Arabic':
         return f'<div style="direction: rtl; unicode-bidi: embed; text-align: right;">{text}</div>'
     return text
 
+# --- تعريف النصوص الديناميكية للواجهة ---
 def get_texts(lang):
     if lang == 'English':
         return {
