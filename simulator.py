@@ -12,7 +12,7 @@ st.set_page_config(page_title="Patient Counselling Simulator", layout="wide")
 # --- جلب المفتاح من Secrets بأمان ---
 # تأكد من إضافة GEMINI_API_KEY في إعدادات Streamlit Cloud Secrets
 try:
-    GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
+    GEMINI_API_KEY = st.secrets["AIzaSyDpjmc3mMO4q4KP1MvHMXOsOL_k5M6-umA"]
 except:
     st.error("لم يتم العثور على المفتاح! يرجى إضافته في إعدادات Secrets.")
     st.stop()
@@ -29,3 +29,4 @@ client = get_gemini_client()
 
 # بقية الكود الخاص بك كما هو...
 # (للاختصار، أكمل بقية وظائف الـ Bidi و الـ Chat Session هنا)
+
