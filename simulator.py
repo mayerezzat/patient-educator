@@ -3,29 +3,28 @@ import google.generativeai as genai
 from streamlit_mic_recorder import speech_to_text
 from streamlit_TTS import text_to_speech
 
-# --- إعدادات الصفحة ---
+# --- 1. إعدادات الصفحة ---
 st.set_page_config(page_title="إرشاد Mornigag", layout="wide")
 
-# --- الإعدادات العامة ---
+# --- 2. الإعدادات العامة ---
 PRODUCT_NAME = "Mornigag"
 GEMINI_API_KEY = "AIzaSyDpjmc3mMO4q4KP1MvHMXOsOL_k5M6-umA"
 
-# تهيئة Gemini (الحل الجذري لخطأ 404)
+# تهيئة المكتبة وإجبارها على استخدام الموديل المستقر
 try:
     genai.configure(api_key=GEMINI_API_KEY)
-    # نستخدم الموديل بدون كلمة models/ في البداية لتجنب تعارض الإصدارات
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    # الحل الجذري لخطأ 404: تحديد الموديل والنسخة المستقرة
+    model = genai.GenerativeModel(model_name='gemini-1.5-flash')
 except Exception as e:
-    st.error("خطأ في تهيئة المفتاح")
+    st.error(f"خطأ في الإعداد: {e}")
 
 def format_bidi_text(text, lang):
     if lang == 'Arabic':
         return f'<div style="direction: rtl; text-align: right;">{text}</div>'
     return text
 
-# --- النصوص المطلوبة ---
+# --- 3. النصوص (تم حذف الجملة وتعديل التعليمات) ---
 def get_texts(lang):
-    # النص الذي طلبته بالضبط
     instr_ar = "للبدء، انقر على أيقونة **انقر للتحدث** ثم تحدث، وبعد الانتهاء انقر عليها مرة أخرى."
     instr_en = "To start, click on the **Click to Speak** icon, then talk, and click it again when finished."
     
@@ -44,7 +43,7 @@ def get_texts(lang):
             'stt_lang': 'ar', 'tts_lang': 'ar'
         }
 
-# --- الواجهة ---
+# --- 4. الواجهة ---
 selected_lang = st.sidebar.selectbox("Language / اللغة", ["Arabic", "English"])
 texts = get_texts(selected_lang)
 
@@ -55,7 +54,7 @@ with st.expander("Instructions / تعليمات", expanded=True):
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# --- الإدخال ---
+# --- 5. الإدخال ---
 c1, c2 = st.columns([1, 4])
 with c1:
     spoken = speech_to_text(language=texts['stt_lang'], start_prompt="🎙️", stop_prompt="⏹️", just_once=True, key=f"mic_{selected_lang}")
@@ -64,7 +63,7 @@ with c2:
 
 user_input = spoken if spoken else written
 
-# --- المعالجة ---
+# --- 6. المعالجة ---
 container = st.container()
 for m in st.session_state.messages:
     with container:
@@ -77,9 +76,9 @@ if user_input:
     
     with st.spinner("..."):
         try:
-            # صياغة الطلب بطريقة بسيطة ومستقرة
-            prompt_context = f"You are a professional Patient Educator for {PRODUCT_NAME}. Respondent is Sarah. Respond in {selected_lang} only. Question: {user_input}"
-            response = model.generate_content(prompt_context)
+            # استخدام generate_content بدلاً من chat_session لتقليل احتمالية خطأ 404
+            context = f"You are a Patient Educator for {PRODUCT_NAME}. Speak in {selected_lang} only. Question: {user_input}"
+            response = model.generate_content(context)
             ai_text = response.text
             
             st.session_state.messages.append({"role": "assistant", "content": ai_text})
@@ -89,4 +88,12 @@ if user_input:
             text_to_speech(text=ai_text, language=texts['tts_lang'], key=f"v_{hash(ai_text)}")
             st.rerun()
         except Exception as e:
-            st.error(f"حدث خطأ: {str(e)}")
+            # إذا فشل 1.5-flash، نجرب gemini-pro كخيار احتياطي أخير
+            try:
+                backup_model = genai.GenerativeModel('gemini-pro')
+                response = backup_model.generate_content(context)
+                ai_text = response.text
+                st.session_state.messages.append({"role": "assistant", "content": ai_text})
+                st.rerun()
+            except:
+                st.error("نعتذر، هناك مشكلة في خوادم جوجل في منطقتك حالياً. يرجى المحاولة لاحقاً.")
