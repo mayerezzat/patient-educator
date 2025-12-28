@@ -10,7 +10,7 @@ st.set_page_config(page_title="إرشاد Mornigag", layout="wide")
 PRODUCT_NAME = "Mornigag"
 GEMINI_API_KEY = "AIzaSyDpjmc3mMO4q4KP1MvHMXOsOL_k5M6-umA"
 
-# تهيئة المكتبة المستقرة
+# تهيئة Gemini
 genai.configure(api_key=GEMINI_API_KEY)
 
 def format_bidi_text(text, lang):
@@ -18,7 +18,7 @@ def format_bidi_text(text, lang):
         return f'<div style="direction: rtl; text-align: right;">{text}</div>'
     return text
 
-# --- 3. النصوص المطلوبة ---
+# --- 3. النصوص (تم حذف الجملة وتعديل التعليمات) ---
 def get_texts(lang):
     instr_ar = "للبدء، انقر على أيقونة **انقر للتحدث** ثم تحدث، وبعد الانتهاء انقر عليها مرة أخرى."
     instr_en = "To start, click on the **Click to Speak** icon, then talk, and click it again when finished."
@@ -38,7 +38,7 @@ def get_texts(lang):
             'stt_lang': 'ar', 'tts_lang': 'ar'
         }
 
-# --- 4. الواجهة ---
+# --- 4. واجهة التطبيق ---
 selected_lang = st.sidebar.selectbox("Language / اللغة", ["Arabic", "English"])
 texts = get_texts(selected_lang)
 
@@ -46,20 +46,27 @@ st.markdown(f"## {texts['title']}")
 with st.expander("Instructions / تعليمات", expanded=True):
     st.markdown(texts['instructions'])
 
-# --- 5. إدارة الجلسة ---
+# --- 5. إدارة المحادثة ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
 @st.cache_resource
 def get_model():
+    # استخدام gemini-1.5-flash لضمان السرعة والاستقرار
     return genai.GenerativeModel('gemini-1.5-flash')
 
 model = get_model()
 
-# --- 6. الإدخال ---
+# --- 6. الإدخال (صوت وكتابة) ---
 c1, c2 = st.columns([1, 4])
 with c1:
-    spoken = speech_to_text(language=texts['stt_lang'], start_prompt="🎙️", stop_prompt="⏹️", just_once=True, key=f"mic_{selected_lang}")
+    spoken = speech_to_text(
+        language=texts['stt_lang'], 
+        start_prompt="🎙️", 
+        stop_prompt="⏹️", 
+        just_once=True, 
+        key=f"mic_{selected_lang}"
+    )
 with c2:
     written = st.text_input("in", key=f"txt_{selected_lang}", label_visibility="collapsed", placeholder=texts['input_hint'])
 
@@ -78,7 +85,8 @@ if user_input:
     
     with st.spinner("..."):
         try:
-            prompt = f"System: You are a Patient Educator for {PRODUCT_NAME}. Speak in {selected_lang} only.\n\n"
+            # بناء سياق المحادثة
+            prompt = f"System: You are a professional Patient Educator for {PRODUCT_NAME}. Respond in {selected_lang} only.\n\n"
             for m in st.session_state.messages[-5:]:
                 prompt += f"{m['role']}: {m['content']}\n"
             
@@ -89,7 +97,8 @@ if user_input:
             with container:
                 st.chat_message("assistant", avatar="👩‍⚕️").markdown(format_bidi_text(ai_text, selected_lang), unsafe_allow_html=True)
             
+            # تحويل الرد إلى صوت
             text_to_speech(text=ai_text, language=texts['tts_lang'], key=f"v_{hash(ai_text)}")
             st.rerun()
         except Exception as e:
-            st.error("خطأ في الاتصال. يرجى التأكد من تحديث ملف requirements.txt")
+            st.error("Connection Error. Please check requirements.txt and Reboot.")
