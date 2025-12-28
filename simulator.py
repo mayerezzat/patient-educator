@@ -7,7 +7,7 @@ import os
 
 # --- 1. إعدادات الصفحة ---
 st.set_page_config(
-    page_title="Patient Counselling Simulator", 
+    page_title="إرشاد Mornigag", 
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -21,7 +21,7 @@ def get_gemini_client():
     try:
         return genai.Client(api_key=GEMINI_API_KEY)
     except Exception as e:
-        st.error(f"Error: {e}")
+        st.error(f"خطأ في الاتصال: {e}")
         st.stop()
 
 client = get_gemini_client()
@@ -31,14 +31,14 @@ def format_bidi_text(text, lang):
         return f'<div style="direction: rtl; unicode-bidi: embed; text-align: right;">{text}</div>'
     return text
 
-# --- 3. النصوص (تم حذف الجملة المطلوبة من العنوان هنا) ---
+# --- 3. النصوص (تم حذف الجملة المطلوبة وتعديل التعليمات) ---
 def get_texts(lang):
     instruction_ar = "للبدء، انقر على أيقونة **انقر للتحدث** ثم تحدث، وبعد الانتهاء انقر عليها مرة أخرى."
     instruction_en = "To start, click on the **Click to Speak** icon, then talk, and click it again when finished."
 
     if lang == 'English':
         return {
-            'title': f"**{PRODUCT_NAME}** Counselling", # تم حذف "AI as Educator"
+            'title': f"**{PRODUCT_NAME}** Counselling", 
             'subheader': "Simulated Session",
             'instructions': instruction_en,
             'sidebar_title': "🎙️ Settings",
@@ -50,18 +50,17 @@ def get_texts(lang):
             'stop_prompt': "Stop Recording (⏹️)",
             'chat_input_prompt': "Type here...",
             'thinking_spinner': "AI is processing...",
-            'accent_options': ["Empathetic", "Formal", "Direct"],
-            'model_name': "gemini-1.5-flash", 
+            'model_name': "gemini-2.0-flash-exp", # تم التغيير لتجنب خطأ 404
             'tts_lang': 'en',
             'stt_lang': 'en'
         }
     else:
         return {
-            'title': f"إرشاد دواء **{PRODUCT_NAME}**", # تم حذف "الذكاء الاصطناعي كمعلم"
+            'title': f"إرشاد دواء **{PRODUCT_NAME}**", 
             'subheader': "وضع المحاكاة",
             'instructions': instruction_ar,
             'sidebar_title': "🎙️ الإعدادات",
-            'lang_select': "اختيار اللغة",
+            'lang_select': "اللغة",
             'speed_slider': "سرعة الكلام",
             'accent_select': "نمط المعلم",
             'your_response': "🎤 **رسالتك**",
@@ -69,8 +68,7 @@ def get_texts(lang):
             'stop_prompt': "إيقاف التسجيل (⏹️)",
             'chat_input_prompt': "اكتب هنا...",
             'thinking_spinner': "جاري المعالجة...",
-            'accent_options': ["متعاطف", "رسمي", "مباشر"],
-            'model_name': "gemini-1.5-flash",
+            'model_name': "gemini-2.0-flash-exp",
             'tts_lang': 'ar',
             'stt_lang': 'ar'
         }
@@ -79,10 +77,10 @@ def get_texts(lang):
 selected_lang = st.sidebar.selectbox("Language", ["Arabic", "English"], index=0)
 texts = get_texts(selected_lang)
 tts_speed = st.sidebar.slider(texts['speed_slider'], 0.5, 2.0, 1.2)
-selected_accent = st.sidebar.selectbox(texts['accent_select'], texts['accent_options'])
+selected_accent = st.sidebar.selectbox(texts['accent_select'], ["متعاطف", "رسمي", "مباشر"])
 
 # --- 5. الواجهة الرئيسية ---
-st.markdown(f"## {texts['title']}") # سيعرض الآن فقط "إرشاد دواء Mornigag"
+st.markdown(f"## {texts['title']}")
 with st.expander("Instructions", expanded=True):
     st.markdown(texts['instructions'])
 
@@ -90,11 +88,11 @@ with st.expander("Instructions", expanded=True):
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# استخدام موديل 1.5-flash كونه الأكثر استقراراً لتجنب أخطاء 404
-if "chat_session" not in st.session_state or st.session_state.get('last_lang') != selected_lang:
-    st.session_state.last_lang = selected_lang
+# حل مشكلة الـ 404 باستخدام الموديل الجديد وفصل الجلسات
+session_key = f"chat_session_{selected_lang}"
+if session_key not in st.session_state:
     sys_prompt = f"You are a Patient Educator for {PRODUCT_NAME}. Respond in {selected_lang} only."
-    st.session_state.chat_session = client.chats.create(
+    st.session_state[session_key] = client.chats.create(
         model=texts['model_name'],
         config=types.GenerateContentConfig(system_instruction=sys_prompt)
     )
@@ -110,6 +108,7 @@ user_input = spoken if spoken else written
 
 chat_display = st.container()
 
+# عرض التاريخ
 for msg in st.session_state.messages:
     with chat_display:
         st.chat_message(msg["role"], avatar=msg.get("avatar")).markdown(format_bidi_text(msg["content"], selected_lang), unsafe_allow_html=True)
@@ -121,7 +120,7 @@ if user_input:
     
     with st.spinner(texts['thinking_spinner']):
         try:
-            response = st.session_state.chat_session.send_message(user_input)
+            response = st.session_state[session_key].send_message(user_input)
             ai_text = response.text
             st.session_state.messages.append({"role": "assistant", "content": ai_text, "avatar": "👩‍⚕️"})
             with chat_display:
@@ -129,4 +128,4 @@ if user_input:
             text_to_speech(text=ai_text, language=texts['tts_lang'], key=f"tts_{hash(ai_text)}")
             st.rerun()
         except Exception as e:
-            st.error(f"Error: {e}")
+            st.error(f"خطأ في توليد الرد: {e}")
